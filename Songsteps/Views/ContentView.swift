@@ -16,43 +16,11 @@ struct ContentView: View {
     
     var body: some View {
         VStack(spacing: 0) {
-            // 顶部导航区域
-            VStack(spacing: 8) {
-                HStack {
-                    Spacer()
-                    
-                    if let song = currentSong {
-                        VStack(spacing: 4) {
-                            Text(song.title)
-                                .font(.title2.bold())
-                                .foregroundColor(.primary)
-                            Text(song.artist)
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                        }
-                    } else {
-                        Text("Songsteps")
-                            .font(.title.bold())
-                            .foregroundColor(.primary)
-                    }
-                    
-                    Spacer()
-                    
-                    Button {
-                        showingPlaylist = true
-                    } label: {
-                        Image(systemName: "list.bullet")
-                            .font(.title2)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .padding(.horizontal)
-                
-//                Text("跟唱练习")
-//                    .font(.subheadline)
-//                    .foregroundColor(.secondary)
-            }
-            .padding(.top)
+            // 导航栏
+            NavigationBarView(
+                currentSong: currentSong,
+                onPlaylistTap: { showingPlaylist = true }
+            )
             
             // 音频可视化区域
             AudioVisualizerView(
@@ -81,6 +49,27 @@ struct ContentView: View {
                     print("点击歌词，打开歌词列表")
                     showingLyricSheet = true
                 }
+                // 添加左右滑动手势
+                .gesture(
+                    DragGesture(minimumDistance: 20)
+                        .onEnded { value in
+                            guard !lyrics.isEmpty else { return }
+                            
+                            // 获取当前歌词的索引
+                            if let currentIndex = lyrics.firstIndex(where: { $0.text == currentLyric }) {
+                                // 根据滑动方向决定是切换到上一句还是下一句
+                                if value.translation.width > 50 {  // 右滑，切换到上一句
+                                    if currentIndex > 0 {
+                                        switchToLyric(lyrics[currentIndex - 1])
+                                    }
+                                } else if value.translation.width < -50 {  // 左滑，切换到下一句
+                                    if currentIndex < lyrics.count - 1 {
+                                        switchToLyric(lyrics[currentIndex + 1])
+                                    }
+                                }
+                            }
+                        }
+                )
                 
                 if let matchResult = audioManager.currentMatchResult {
                     // 匹配结果卡片
@@ -151,114 +140,20 @@ struct ContentView: View {
             // 底部控制面板
             VStack(spacing: 20) {
                 // 播放控制区
-                HStack(spacing: 40) {
-                    // 循环按钮
-                    Button {
-                        isLoopEnabled.toggle()
-                        audioManager.isLoopEnabled = isLoopEnabled
-                        print("切换循环模式: \(isLoopEnabled)")
-                        
-                        if isLoopEnabled {
-                            if let currentLyricLine = lyrics.first(where: { $0.text == currentLyric }) {
-                                let nextLyricIndex = lyrics.firstIndex(where: { $0.time > currentLyricLine.time }) ?? lyrics.count
-                                let endTime = nextLyricIndex < lyrics.count ? lyrics[nextLyricIndex].time : audioManager.duration
-                                audioManager.setLoopRange(startTime: currentLyricLine.time, endTime: endTime)
-                            }
-                        }
-                    } label: {
-                        Image(systemName: isLoopEnabled ? "repeat.circle.fill" : "repeat.circle")
-                            .font(.title2)
-                            .foregroundColor(isLoopEnabled ? .green : .secondary)
-                    }
-                    
-                    // 播放/暂停按钮
-                    Button {
-                        if audioManager.isPlaying {
-                            print("暂停播放")
-                            audioManager.pause()
-                        } else {
-                            print("开始播放")
-                            if let selectedLyric = lastSelectedLyric {
-                                audioManager.play(fromTime: selectedLyric.time)
-                            } else if let currentLyric = lyrics.first(where: { $0.text == self.currentLyric }) {
-                                audioManager.play(fromTime: currentLyric.time)
-                            } else {
-                                audioManager.play()
-                            }
-                        }
-                    } label: {
-                        Image(systemName: audioManager.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 54))
-                            .foregroundColor(.accentColor)
-                    }
-                    
-                    // 语言选择按钮
-                    Menu {
-                        ForEach(RecognitionLanguage.allCases, id: \.self) { language in
-                            Button(language.displayName) {
-                                print("切换识别语言: \(language.displayName)")
-                                audioManager.switchRecognitionLanguage(to: language)
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "globe")
-                            .font(.title2)
-                            .foregroundColor(.secondary)
-                    }
-                }
+                PlaybackControlsView(
+                    audioManager: audioManager,
+                    lyrics: lyrics,
+                    currentLyric: currentLyric,
+                    isLoopEnabled: $isLoopEnabled,
+                    lastSelectedLyric: lastSelectedLyric
+                )
                 
                 // 录音控制区
-                HStack(spacing: 30) {
-                    // 录音按钮
-                    Button {
-                        if audioManager.isRecording {
-                            print("停止录音")
-                            audioManager.stopRecording()
-                        } else {
-                            print("开始录音")
-                            if let currentLyric = lyrics.first(where: { $0.text == self.currentLyric }) {
-                                let nextLyricIndex = lyrics.firstIndex(where: { $0.time > currentLyric.time }) ?? lyrics.count
-                                let endTime = nextLyricIndex < lyrics.count ? lyrics[nextLyricIndex].time : audioManager.duration
-                                audioManager.startRecording(startTime: currentLyric.time, endTime: endTime)
-                            }
-                        }
-                    } label: {
-                        Label(
-                            audioManager.isRecording ? "停止录音" : "开始录音",
-                            systemImage: audioManager.isRecording ? "stop.circle.fill" : "record.circle"
-                        )
-                        .font(.headline)
-                        .foregroundColor(audioManager.isRecording ? .red : .accentColor)
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 10)
-                        .background(audioManager.isRecording ? Color.red.opacity(0.15) : Color.accentColor.opacity(0.15))
-                        .cornerRadius(20)
-                    }
-                    
-                    if !audioManager.recordedWaveform.isEmpty {
-                        // 播放录音按钮
-                        Button {
-                            if audioManager.isPlayingRecording {
-                                print("停止播放录音")
-                                audioManager.stopPlayingRecording()
-                            } else {
-                                print("播放录音")
-                                audioManager.playRecording()
-                            }
-                        } label: {
-                            Label(
-                                audioManager.isPlayingRecording ? "停止播放" : "播放录音",
-                                systemImage: audioManager.isPlayingRecording ? "stop.fill" : "play.fill"
-                            )
-                            .font(.headline)
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 10)
-                            .background(Color(.systemGray6))
-                            .cornerRadius(20)
-                        }
-                    }
-                }
+                RecordingControlsView(
+                    audioManager: audioManager,
+                    lyrics: lyrics,
+                    currentLyric: currentLyric
+                )
             }
             .padding(.vertical, 20)
             .padding(.horizontal)
@@ -452,6 +347,28 @@ struct ContentView: View {
                 endTime: lyrics.count > 1 ? lyrics[1].time : audioManager.duration
             )
         }
+    }
+    
+    private func switchToLyric(_ lyric: LyricLine) {
+        print("切换到歌词: \(lyric.text), 时间: \(lyric.time), ID: \(lyric.id)")
+        lastSelectedLyric = lyric
+        currentLyric = lyric.text
+        
+        let nextLyricIndex = lyrics.firstIndex(where: { $0.time > lyric.time }) ?? lyrics.count
+        let endTime = nextLyricIndex < lyrics.count ? lyrics[nextLyricIndex].time : audioManager.duration
+        
+        audioManager.onLyricChanged(
+            lyricId: lyric.id,
+            text: lyric.text,
+            startTime: lyric.time,
+            endTime: endTime
+        )
+        
+        if isLoopEnabled {
+            audioManager.setLoopRange(startTime: lyric.time, endTime: endTime)
+        }
+        
+        audioManager.seekTo(time: lyric.time)
     }
 }
 

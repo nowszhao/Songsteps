@@ -65,6 +65,9 @@ class AudioManager: NSObject, ObservableObject {
     private let recordingManager = LyricRecordingManager.shared
     private var currentLyricId: String?
     
+    private var timePitch: AVAudioUnitTimePitch?
+    @Published var playbackRate: Float = 1.0
+    
     var duration: Double {
         audioPlayer?.duration ?? 0
     }
@@ -116,16 +119,21 @@ class AudioManager: NSObject, ObservableObject {
         audioEngine?.stop()
         audioEngine = AVAudioEngine()
         playerNode = AVAudioPlayerNode()
+        timePitch = AVAudioUnitTimePitch()
         
         guard let engine = audioEngine,
-              let player = playerNode else { return }
+              let player = playerNode,
+              let pitch = timePitch else { return }
         
         do {
             let audioFile = try AVAudioFile(forReading: url)
             
             engine.attach(player)
-            let mainMixer = engine.mainMixerNode
-            engine.connect(player, to: mainMixer, format: audioFile.processingFormat)
+            engine.attach(pitch)
+            
+            // 连接节点: player -> timePitch -> mainMixer
+            engine.connect(player, to: pitch, format: audioFile.processingFormat)
+            engine.connect(pitch, to: engine.mainMixerNode, format: audioFile.processingFormat)
             
             try engine.start()
             player.scheduleFile(audioFile, at: nil)
@@ -693,6 +701,11 @@ class AudioManager: NSObject, ObservableObject {
     func setLoopRange(startTime: Double, endTime: Double) {
         loopStartTime = startTime
         loopEndTime = endTime
+    }
+    
+    func setPlaybackRate(_ rate: Float) {
+        playbackRate = rate
+        timePitch?.rate = rate
     }
 }
 

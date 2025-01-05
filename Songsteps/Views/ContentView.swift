@@ -10,18 +10,47 @@ struct ContentView: View {
     @State private var lastSelectedLyric: LyricLine?
     @State private var isLoopEnabled: Bool = false
     @State private var showingRecordingHistory = false
+    @StateObject private var library = LocalMusicLibrary.shared
+    @State private var showingPlaylist = false
+    @State private var currentSong: Song?
     
     var body: some View {
         VStack(spacing: 0) {
             // 顶部导航区域
             VStack(spacing: 8) {
-                Text("Songsteps")
-                    .font(.title.bold())
-                    .foregroundColor(.primary)
+                HStack {
+                    Spacer()
+                    
+                    if let song = currentSong {
+                        VStack(spacing: 4) {
+                            Text(song.title)
+                                .font(.title2.bold())
+                                .foregroundColor(.primary)
+                            Text(song.artist)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                    } else {
+                        Text("Songsteps")
+                            .font(.title.bold())
+                            .foregroundColor(.primary)
+                    }
+                    
+                    Spacer()
+                    
+                    Button {
+                        showingPlaylist = true
+                    } label: {
+                        Image(systemName: "list.bullet")
+                            .font(.title2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.horizontal)
                 
-                Text("跟唱练习")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
+//                Text("跟唱练习")
+//                    .font(.subheadline)
+//                    .foregroundColor(.secondary)
             }
             .padding(.top)
             
@@ -42,12 +71,6 @@ struct ContentView: View {
                     Text(currentLyric)
                         .font(.title2.bold())
                         .multilineTextAlignment(.center)
-                    
-                    Spacer()
-                    
-                    Image(systemName: "list.bullet")
-                        .font(.title3)
-                        .foregroundColor(.secondary)
                 }
                 .padding()
                 .frame(maxWidth: .infinity)
@@ -246,7 +269,7 @@ struct ContentView: View {
         }
         .padding()
         .onAppear {
-            loadAudioAndLyrics()
+            loadAudioAndLyrics1()
             audioManager.setupRecording()
             if let firstLyric = lyrics.first {
                 currentLyric = firstLyric.text
@@ -289,9 +312,16 @@ struct ContentView: View {
                 }
             )
         }
+        .sheet(isPresented: $showingPlaylist) {
+            PlaylistView { song in
+                loadSong(song)
+                showingPlaylist = false
+            }
+        }
     }
     
-    private func loadAudioAndLyrics() {
+    
+    private func loadAudioAndLyrics1() {
         // 加载音频文件
         if let audioUrl = Bundle.main.url(forResource: "a", withExtension: "mp3") {
             audioManager.setupAudio(url: audioUrl)
@@ -315,8 +345,37 @@ struct ContentView: View {
         }
     }
     
+    private func loadAudioAndLyrics(mp3URL: URL, lrcURL: URL) -> Bool {
+        print("加载歌曲: \(mp3URL.lastPathComponent)")
+        
+        // 停止当前播放和录音
+        audioManager.stop()
+        audioManager.stopRecording()
+        
+        // 加载音频文件
+        audioManager.setupAudio(url: mp3URL)
+        
+        // 加载歌词文件
+        if let lrcContent = try? String(contentsOf: lrcURL, encoding: .utf8) {
+            let (_, parsedLyrics) = LyricParser.parse(lrcContent)
+            lyrics = parsedLyrics.sorted(by: { $0.time < $1.time })
+            
+            if let firstLyric = lyrics.first {
+                currentLyric = firstLyric.text
+                audioManager.onLyricChanged(
+                    lyricId: firstLyric.id,
+                    text: firstLyric.text,
+                    startTime: firstLyric.time,
+                    endTime: lyrics.count > 1 ? lyrics[1].time : audioManager.duration
+                )
+                return true
+            }
+        }
+        return false
+    }
+    
     private func updateCurrentLyric(at time: Double) {
-        print("更新歌词 - 当前时间: \(time)")
+//        print("更新歌词 - 当前时间: \(time)")
         
         if let lastSelected = lastSelectedLyric {
             let nextLyricIndex = lyrics.firstIndex(where: { $0.time > lastSelected.time }) ?? lyrics.count
@@ -337,10 +396,10 @@ struct ContentView: View {
             let nextTime = nextLyricIndex < lyrics.count ? lyrics[nextLyricIndex].time : Double.infinity
             return lyric.time <= time && time < nextTime
         }) {
-            print("找到匹配时间的歌词: \(currentLyric.text), 时间: \(currentLyric.time)")
+//            print("找到匹配时间的歌词: \(currentLyric.text), 时间: \(currentLyric.time)")
             
             if self.currentLyric != currentLyric.text {
-                print("更新显示歌词从: \(self.currentLyric) 到: \(currentLyric.text)")
+//                print("更新显示歌词从: \(self.currentLyric) 到: \(currentLyric.text)")
                 self.currentLyric = currentLyric.text
                 
                 let nextLyricIndex = lyrics.firstIndex(where: { $0.time > currentLyric.time }) ?? lyrics.count
@@ -357,6 +416,41 @@ struct ContentView: View {
                     audioManager.setLoopRange(startTime: currentLyric.time, endTime: endTime)
                 }
             }
+        }
+    }
+    
+    func loadSong(_ song: Song) {
+        print("loadSong song:", song)
+        
+        guard let audioUrl = song.localMp3URL,
+              let lrcUrl = song.localLrcURL,
+              FileManager.default.fileExists(atPath: audioUrl.path),
+              FileManager.default.fileExists(atPath: lrcUrl.path),
+              let lrcContent = try? String(contentsOf: lrcUrl, encoding: .utf8) else {
+            print("歌曲加载失败: \(song.title)")
+            // 如果文件不存在，从库中移除
+            library.removeSong(song)
+            return
+        }
+        
+        // 更新当前歌曲
+        currentSong = song
+        
+        // 加载音频文件
+        audioManager.setupAudio(url: audioUrl)
+        
+        // 加载歌词文件
+        let (_, parsedLyrics) = LyricParser.parse(lrcContent)
+        lyrics = parsedLyrics.sorted(by: { $0.time < $1.time })
+        
+        if let firstLyric = lyrics.first {
+            currentLyric = firstLyric.text
+            audioManager.onLyricChanged(
+                lyricId: firstLyric.id,
+                text: firstLyric.text,
+                startTime: firstLyric.time,
+                endTime: lyrics.count > 1 ? lyrics[1].time : audioManager.duration
+            )
         }
     }
 }

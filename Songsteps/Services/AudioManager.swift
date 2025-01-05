@@ -68,6 +68,9 @@ class AudioManager: NSObject, ObservableObject {
     private var timePitch: AVAudioUnitTimePitch?
     @Published var playbackRate: Float = 1.0
     
+    private var speechSynthesizer: AVSpeechSynthesizer?
+    @Published var isSpeaking: Bool = false
+    
     var duration: Double {
         audioPlayer?.duration ?? 0
     }
@@ -76,6 +79,7 @@ class AudioManager: NSObject, ObservableObject {
         super.init()
         setupRecording()
         setupSpeechRecognizer()
+        speechSynthesizer = AVSpeechSynthesizer()
     }
     
     func setupAudio(url: URL) {
@@ -707,6 +711,42 @@ class AudioManager: NSObject, ObservableObject {
         playbackRate = rate
         timePitch?.rate = rate
     }
+    
+    func speakLyric(_ text: String) {
+        print("开始朗读歌词: \(text)")
+        
+        // 如果正在播放音频，先暂停
+        let wasPlaying = isPlaying
+        if isPlaying {
+            pause()
+        }
+        
+        // 停止之前的朗读
+        speechSynthesizer?.stopSpeaking(at: .immediate)
+        
+        // 创建朗读任务
+        let utterance = AVSpeechUtterance(string: text)
+        utterance.rate = 0.2 // 设置较慢的语速
+        utterance.pitchMultiplier = 1.0
+        utterance.volume = 1.0
+        
+        // 根据当前语言设置朗读语言
+        utterance.voice = AVSpeechSynthesisVoice(language: currentLanguage.rawValue)
+        
+        // 设置完成回调
+        speechSynthesizer?.delegate = self
+        
+        isSpeaking = true
+        speechSynthesizer?.speak(utterance)
+        
+        print("朗读配置 - 语言: \(currentLanguage.rawValue), 语速: 0.5")
+    }
+    
+    func stopSpeaking() {
+        print("停止朗读")
+        speechSynthesizer?.stopSpeaking(at: .immediate)
+        isSpeaking = false
+    }
 }
 
 extension AudioManager: AVAudioRecorderDelegate {
@@ -721,6 +761,22 @@ extension AudioManager: AVAudioPlayerDelegate {
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         if player === recordedAudioPlayer {
             isPlayingRecording = false
+        }
+    }
+}
+
+extension AudioManager: AVSpeechSynthesizerDelegate {
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        print("朗读完成")
+        DispatchQueue.main.async {
+            self.isSpeaking = false
+        }
+    }
+    
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        print("朗读被取消")
+        DispatchQueue.main.async {
+            self.isSpeaking = false
         }
     }
 } 

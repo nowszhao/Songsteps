@@ -18,7 +18,7 @@ struct PlaybackControlsView: View {
     ]
     
     var body: some View {
-        HStack(spacing: 40) {
+        HStack(spacing: 20) {
             // 循环按钮
             Button {
                 isLoopEnabled.toggle()
@@ -37,6 +37,21 @@ struct PlaybackControlsView: View {
                     .font(.title2)
                     .foregroundColor(isLoopEnabled ? .green : .secondary)
             }
+            
+            // 语言选择按钮
+            Menu {
+                ForEach(RecognitionLanguage.allCases, id: \.self) { language in
+                    Button(language.displayName) {
+                        print("切换识别语言: \(language.displayName)")
+                        audioManager.switchRecognitionLanguage(to: language)
+                    }
+                }
+            } label: {
+                Image(systemName: "globe")
+                    .font(.title2)
+                    .foregroundColor(.secondary)
+            }
+
             
             // 播放/暂停按钮
             Button {
@@ -59,19 +74,21 @@ struct PlaybackControlsView: View {
                     .foregroundColor(.accentColor)
             }
             
-            // 语言选择按钮
-//            Menu {
-//                ForEach(RecognitionLanguage.allCases, id: \.self) { language in
-//                    Button(language.displayName) {
-//                        print("切换识别语言: \(language.displayName)")
-//                        audioManager.switchRecognitionLanguage(to: language)
-//                    }
-//                }
-//            } label: {
-//                Image(systemName: "globe")
-//                    .font(.title2)
-//                    .foregroundColor(.secondary)
-//            }
+            
+            // 播放速度按钮
+            Button {
+                if audioManager.isSpeaking {
+                    print("停止朗读歌词")
+                    audioManager.stopSpeaking()
+                } else {
+                    print("开始朗读歌词: \(currentLyric)")
+                    audioManager.speakLyric(currentLyric)
+                }
+            } label: {
+                Image(systemName: audioManager.isSpeaking ? "text.bubble.fill" : "text.bubble")
+                    .font(.title2)
+                    .foregroundColor(audioManager.isSpeaking ? .green : .secondary)
+            }
             
             // 播放速度按钮
             Menu {

@@ -131,6 +131,25 @@ struct ContentView: View {
                     .padding()
                     .background(Color(.systemGray6))
                     .cornerRadius(12)
+                } else {
+                    // 添加默认展示状态
+                    VStack(spacing: 12) {
+                        Image(systemName: "music.mic")
+                            .font(.system(size: 32))
+                            .foregroundColor(.secondary)
+                        
+                        Text("点击录音按钮开始演唱")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                        
+                        Text("演唱后可以查看评分和匹配结果")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary.opacity(0.8))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 32)
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
                 }
             }
             .padding()

@@ -1,10 +1,3 @@
-//
-//  ContentView.swift
-//  Songsteps
-//
-//  Created by changhozhao on 2025/1/4.
-//
-
 import SwiftUI
 
 struct ContentView: View {
